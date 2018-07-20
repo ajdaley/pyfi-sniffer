@@ -1,7 +1,20 @@
 import os
 import signal
 import subprocess
+import logging;
 
+logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s',
+                    datefmt='%d/%m/%Y %I:%M:%S',
+                    level="INFO")
+
+# DEBUG (low)
+# INFO
+# WARNING
+# ERROR
+# CRITICAL (high)
+#
+# default is WARNING so only that and above will print
+#
 
 def get_wireless_interfaces():
 
@@ -49,7 +62,7 @@ def get_all_interfaces():
         # send kill signal to all process groups
         os.killpg(os.getpgid(sp.pid), signal.SIGTERM)
     except OSError:
-        print "[DEBUG] No such process " + str(sp.pid)
+        logging.warning("No such process " + str(sp.pid))
 
     interface_list = map(lambda s: s.split("logical name: ")[-1], interface_list)
 
@@ -72,15 +85,18 @@ def get_monitor_interfaces():
             # send kill signal to all process groups
             os.killpg(os.getpgid(sp.pid), signal.SIGTERM)
         except OSError:
-            print "[DEBUG] No such process " + str(sp.pid)
+            logging.debug("No such process " + str(sp.pid))
 
     return mon_ifaces
 
 
 if __name__ == "__main__":
+
     ifaces = get_monitor_interfaces();
     if ifaces:
         if len(ifaces) > 1:
-            print "[INFO] More than one interface found that supports monitor mode... using " + ifaces[0]
+            logging.info("More than one interface found that supports monitor mode... using " + ifaces[0])
         else:
-            print "[INFO] Using interface " + ifaces[0]
+            logging.info("Using interface " + ifaces[0])
+    else:
+        logging.warning("No interfaces found. Exiting")
