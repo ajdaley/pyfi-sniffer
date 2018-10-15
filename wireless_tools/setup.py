@@ -20,7 +20,7 @@ from scapy.layers.dot11 import *
 #
 logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s',
                     datefmt='%d/%m/%Y %I:%M:%S',
-                    level="INFO")
+                    level="DEBUG")
 
 
 def get_wireless_interfaces():
@@ -105,10 +105,10 @@ def get_monitor_interfaces():
 
 
 def printPkts(pkt):
-    """Print packets that have a Dot11 Layer"""
+    """Print Beacons"""
+    if (pkt.haslayer(Dot11)) and (pkt[Dot11].type == 0) and (pkt[Dot11].subtype == 8) : #type 4 == ProbRequest
+        print("Beacon from addr2: " + pkt[Dot11].addr2 + " SSID: " + pkt[Dot11].info)
 
-    if pkt.haslayer(Dot11):
-        print pkt.summary()
 
 
 def put_card_monitor(iface):
@@ -211,13 +211,14 @@ if __name__ == "__main__":
     if put_card_monitor(ifaces[0]):
         #sniff(iface="wlxf4f26d0d7431", prn=printPkts,store=0, count=0)
         try:
-            sniff(iface="wlxf4f26d0d7431", prn=printPkts)
+            sniff(iface=ifaces[0], prn=printPkts)
         except KeyboardInterrupt:
             logging.info("Keyboard Interrupt captured, exiting")
             try:
                 sys.exit(0)
             except SystemExit:
                 os._exit(0)
+
     else:
         logging.error("Card not in monitor mode")
 
