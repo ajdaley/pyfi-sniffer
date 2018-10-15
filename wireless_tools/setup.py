@@ -191,7 +191,12 @@ def is_monitor(iface):
 
 if __name__ == "__main__":
 
-    ifaces = get_monitor_interfaces();
+    try:
+        ifaces = get_monitor_interfaces();
+    except OSError:
+        logging.warning("Operation not permitted. Run using sudo. Exiting.")
+        exit(0)
+
     if ifaces:
         if len(ifaces) > 1:
             logging.info("More than one interface found that supports monitor mode... using " + ifaces[0])
