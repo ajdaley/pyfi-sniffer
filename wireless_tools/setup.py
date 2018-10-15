@@ -1,9 +1,33 @@
 import os
 import signal
 import subprocess
+import logging
+from scapy.all import *
+#from scapy.packet import *
+#from scapy.plist import PacketList
+#from scapy.layers.l2 import *
+from scapy.layers.dot11 import *
+
+
+# logging configuration - time level message
+# DEBUG (low)
+# INFO
+# WARNING
+# ERROR
+# CRITICAL (high)
+#
+# default is WARNING so only that and above will print
+#
+logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s',
+                    datefmt='%d/%m/%Y %I:%M:%S',
+                    level="INFO")
 
 
 def get_wireless_interfaces():
+    """
+    Get a set of all wireless interfaces available to the system
+    :return: Dictionary with key=physicalInterfaceName(e.g.phy0), value=interfaceName(e.g. wlan1)
+    """
 
     # get interfaces
     command = "iw dev"
@@ -28,6 +52,7 @@ def get_wireless_interfaces():
 
 
 def get_all_interfaces():
+    """Get a list of all network interfaces available to system"""
 
     # unix command returning available network interfaces
     command = "lshw -class network | grep logical"
@@ -49,7 +74,7 @@ def get_all_interfaces():
         # send kill signal to all process groups
         os.killpg(os.getpgid(sp.pid), signal.SIGTERM)
     except OSError:
-        print "[DEBUG] No such process " + str(sp.pid)
+        logging.warning("No such process " + str(sp.pid))
 
     interface_list = map(lambda s: s.split("logical name: ")[-1], interface_list)
 
@@ -57,6 +82,8 @@ def get_all_interfaces():
 
 
 def get_monitor_interfaces():
+    """Return list of available interfaces that support monitor mode"""
+
     mon_ifaces = []
 
     for (key, value) in get_wireless_interfaces().iteritems():
@@ -72,15 +99,123 @@ def get_monitor_interfaces():
             # send kill signal to all process groups
             os.killpg(os.getpgid(sp.pid), signal.SIGTERM)
         except OSError:
-            print "[DEBUG] No such process " + str(sp.pid)
+            logging.debug("No such process " + str(sp.pid))
 
     return mon_ifaces
 
 
+def printPkts(pkt):
+    """Print packets that have a Dot11 Layer"""
+
+    if pkt.haslayer(Dot11):
+        print pkt.summary()
+
+
+def put_card_monitor(iface):
+    """
+    Put given interface into monitor mode
+    :param iface: interface to put into monitor mode
+    :return: true if successful, false if not
+    """
+
+    # take iface down
+    logging.info("Taking iface down")
+    sp = subprocess.Popen("ifconfig " + iface + " down", shell=True,
+                          stdin=subprocess.PIPE,
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE)
+    sp.communicate()
+    if sp.returncode != 0:
+        logging.error("Could not take down interface")
+
+    try:
+        # send kill signal to all process groups
+        os.killpg(os.getpgid(sp.pid), signal.SIGTERM)
+    except OSError:
+        logging.debug("No such process " + str(sp.pid))
+
+    logging.info("Putting card into monitor")
+    sp = subprocess.Popen("iwconfig " + iface + " mode monitor", shell=True,
+                          stdin=subprocess.PIPE,
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE)
+    sp.communicate()
+    if sp.returncode != 0:
+        logging.error("Could not put iface into monitor mode")
+
+    try:
+        # send kill signal to all process groups
+        os.killpg(os.getpgid(sp.pid), signal.SIGTERM)
+    except OSError:
+        logging.debug("No such process " + str(sp.pid))
+
+    logging.info("Bringing iface up")
+    sp = subprocess.Popen("ifconfig " + iface + " up", shell=True,
+                          stdin=subprocess.PIPE,
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE)
+    sp.communicate()
+    if sp.returncode != 0:
+        logging.error("Could not bring interface back up")
+
+    try:
+        # send kill signal to all process groups
+        os.killpg(os.getpgid(sp.pid), signal.SIGTERM)
+    except OSError:
+        logging.debug("No such process " + str(sp.pid))
+
+    return is_monitor(iface)
+
+
+def is_monitor(iface):
+    """Returns whether given interface is in monitor mode or not"""
+
+    logging.info("Checking to see if in monitor")
+    sp = subprocess.Popen("iwconfig " + iface, shell=True,
+                          stdin=subprocess.PIPE,
+                          stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE)
+    if "Monitor" in sp.communicate()[0]:
+        monitor = True
+    else:
+        monitor = False
+
+    try:
+        # send kill signal to all process groups
+        os.killpg(os.getpgid(sp.pid), signal.SIGTERM)
+    except OSError:
+        logging.debug("No such process " + str(sp.pid))
+
+    return monitor
+
+
 if __name__ == "__main__":
+
     ifaces = get_monitor_interfaces();
     if ifaces:
         if len(ifaces) > 1:
-            print "[INFO] More than one interface found that supports monitor mode... using " + ifaces[0]
+            logging.info("More than one interface found that supports monitor mode... using " + ifaces[0])
         else:
-            print "[INFO] Using interface " + ifaces[0]
+            logging.info("Using interface " + ifaces[0])
+
+    else:
+        logging.warning("No interfaces found. Exiting")
+        exit(0)
+
+    # if not is_monitor(ifaces[0]): DO THIS FIRST
+    if put_card_monitor(ifaces[0]):
+        #sniff(iface="wlxf4f26d0d7431", prn=printPkts,store=0, count=0)
+        try:
+            sniff(iface="wlxf4f26d0d7431", prn=printPkts)
+        except KeyboardInterrupt:
+            logging.info("Keyboard Interrupt captured, exiting")
+            try:
+                sys.exit(0)
+            except SystemExit:
+                os._exit(0)
+    else:
+        logging.error("Card not in monitor mode")
+
+
+
+
